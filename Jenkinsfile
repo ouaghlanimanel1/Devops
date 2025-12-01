@@ -6,15 +6,15 @@ pipeline {
     }
 
     environment {
-        DOCKER_IMAGE = "ahmedridha92618/devopspipline:latest"
-        DOCKER_CREDENTIALS = "e0a06806-724b-42d2-9c5f-83a5d664075f"
+        DOCKER_IMAGE = "manel90162/devopspipline:latest"
+        DOCKER_CREDENTIALS = "pipeline-exemple"
     }
 
     stages {
         stage('Checkout Git') {
             steps {
                 git branch: 'main', 
-                    url: 'https://github.com/Rahmed999/Devops.git'
+                    url: 'https://github.com/ouaghlanimanel1/Devops.git'
             }
         }
 
