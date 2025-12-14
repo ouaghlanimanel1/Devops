@@ -1,75 +1,111 @@
 pipeline {
     agent any
 
-    tools { 
+    tools {
         maven 'M2_HOME'
     }
 
     environment {
-        DOCKER_IMAGE = "manel90162/devopspipline:latest"
         DOCKER_CREDENTIALS = "pipeline-exemple"
+        IMAGE_TAG = "${env.GIT_COMMIT}"
+
+        NEXUS_HOST = "192.168.33.10:8085"
+        NEXUS_REPO = "docker-repo"
+        DOCKER_IMAGE = "${NEXUS_HOST}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
+
+        K8S_NAMESPACE = "devops"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
+
+        SONAR_PROJECT_KEY = "student-app"
+        SONAR_PROJECT_NAME = "Student App"
     }
 
     stages {
+
         stage('Checkout Git') {
             steps {
-                git branch: 'main', 
-                    url: 'https://github.com/ouaghlanimanel1/Devops.git'
+                git branch: 'main', url: 'https://github.com/ouaghlanimanel1/Devops.git'
             }
         }
 
-        stage('Build with Maven') {
+        stage('Build & Unit Tests') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                sh 'mvn clean verify'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh """
+                        mvn sonar:sonar \
+                          -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                          -Dsonar.projectName="${SONAR_PROJECT_NAME}"
+                    """
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${DOCKER_IMAGE} -f docker/Dockerfile .'
+                sh """
+                    docker build -t ${DOCKER_IMAGE} -f docker/Dockerfile .
+                """
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Push Docker Image to Nexus') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: DOCKER_CREDENTIALS,
-                    passwordVariable: 'DOCKER_PASS',
-                    usernameVariable: 'DOCKER_USER'
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    script {
-                        int retries = 3
-                        for (int i = 1; i <= retries; i++) {
-                            try {
-                                // Properly separate commands to avoid shell errors
-                                sh '''
-                                    set -e
-                                    export DOCKER_CLIENT_TIMEOUT=300
-                                    export COMPOSE_HTTP_TIMEOUT=300
-                                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                                    docker push ${DOCKER_IMAGE}
-                                '''
-                                echo "Docker push succeeded on attempt ${i}"
-                                break
-                            } catch (err) {
-                                echo "Push attempt ${i} failed. Retrying..."
-                                if (i == retries) { 
-                                    error("Docker push failed after ${retries} attempts")
-                                }
-                            }
-                        }
-                    }
+                    sh """
+                        echo "$DOCKER_PASS" | docker login ${NEXUS_HOST} -u "$DOCKER_USER" --password-stdin
+                        docker push ${DOCKER_IMAGE}
+                        docker logout ${NEXUS_HOST}
+                    """
                 }
             }
         }
+
+        stage('Deploy to Kubernetes') {
+    steps {
+        sh """
+            kubectl --kubeconfig=${KUBECONFIG} get namespace ${K8S_NAMESPACE} \
+              || kubectl --kubeconfig=${KUBECONFIG} create namespace ${K8S_NAMESPACE}
+
+            kubectl --kubeconfig=${KUBECONFIG} apply -f kub/mysql-deployment.yaml -n ${K8S_NAMESPACE}
+            kubectl --kubeconfig=${KUBECONFIG} apply -f kub/spring-deployment.yaml -n ${K8S_NAMESPACE}
+
+            kubectl --kubeconfig=${KUBECONFIG} set image deployment/student-app \
+              student-app=${DOCKER_IMAGE} -n ${K8S_NAMESPACE}
+
+            kubectl --kubeconfig=${KUBECONFIG} rollout status deployment/student-app \
+              -n ${K8S_NAMESPACE} --timeout=120s
+
+            kubectl --kubeconfig=${KUBECONFIG} get pods -n ${K8S_NAMESPACE}
+        """
+    }
+}
+
     }
 
     post {
-        success { 
-            echo 'Pipeline completed successfully!!' 
+        success {
+            echo '✅ Pipeline completed successfully!'
         }
-        failure { 
-            echo 'Pipeline failed. Check the logs!' 
+        failure {
+            echo '❌ Pipeline failed!'
         }
     }
 }
