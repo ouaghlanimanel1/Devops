@@ -10,7 +10,7 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"  // Use Jenkins build number to ensure unique tags
 
         NEXUS_HOST = "192.168.33.10:8081"
-        NEXUS_REGISTRY = "192.168.33.10:8091"
+        NEXUS_REGISTRY = "192.168.33.10:8083"
         NEXUS_REPO = "docker-hosted"
         DOCKER_IMAGE = "${NEXUS_REGISTRY}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
         
@@ -71,7 +71,7 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh """
-                      # Login au registry Docker
+                      # Login au registry Docker sur le port 8083
                       echo "${DOCKER_PASS}" | docker login ${NEXUS_REGISTRY} -u "${DOCKER_USER}" --password-stdin
                       
                       # Push de l'image
