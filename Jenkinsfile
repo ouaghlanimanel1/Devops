@@ -9,7 +9,7 @@ pipeline {
         DOCKER_CREDENTIALS = "pipeline-exemple"
         IMAGE_TAG = "${env.GIT_COMMIT}"
 
-        NEXUS_HOST = "192.168.33.10:8083"
+        NEXUS_HOST = "192.168.33.10:5000"
         NEXUS_REPO = "docker-repo"
         DOCKER_IMAGE = "${NEXUS_HOST}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
 
