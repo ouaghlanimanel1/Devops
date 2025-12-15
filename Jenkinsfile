@@ -10,9 +10,10 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"  // Use Jenkins build number to ensure unique tags
 
         NEXUS_HOST = "192.168.33.10:8081"
+        NEXUS_REGISTRY = "192.168.33.10:8091"
         NEXUS_REPO = "docker-hosted"
-        DOCKER_IMAGE = "${NEXUS_HOST}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
-
+        DOCKER_IMAGE = "${NEXUS_REGISTRY}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
+        
         K8S_NAMESPACE = "devops"
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
 
@@ -69,11 +70,16 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh '''
-                      echo "$DOCKER_PASS" | docker login ${NEXUS_HOST} -u "$DOCKER_USER" --password-stdin
+                    sh """
+                      # Login au registry Docker
+                      echo "${DOCKER_PASS}" | docker login ${NEXUS_REGISTRY} -u "${DOCKER_USER}" --password-stdin
+                      
+                      # Push de l'image
                       docker push ${DOCKER_IMAGE}
-                      docker logout ${NEXUS_HOST}
-                    '''
+                      
+                      # Logout
+                      docker logout ${NEXUS_REGISTRY}
+                    """
                 }
             }
         }
