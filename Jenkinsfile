@@ -9,7 +9,7 @@ pipeline {
         DOCKER_CREDENTIALS = "pipeline-exemple"
         IMAGE_TAG = "${env.BUILD_NUMBER}"  // Use Jenkins build number to ensure unique tags
 
-        NEXUS_HOST = "192.168.33.10:8081"
+        NEXUS_HOST = "192.168.33.10:8085"
         NEXUS_REPO = "docker-repo"
         DOCKER_IMAGE = "${NEXUS_HOST}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
 
