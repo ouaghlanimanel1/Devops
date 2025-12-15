@@ -9,7 +9,7 @@ pipeline {
         DOCKER_CREDENTIALS = "pipeline-exemple"
         IMAGE_TAG = "${env.GIT_COMMIT}"
 
-        NEXUS_HOST = "192.168.33.10:5000"
+        NEXUS_HOST = "192.168.33.10:8083"  // Docker Registry sur 8083
         NEXUS_REPO = "docker-repo"
         DOCKER_IMAGE = "${NEXUS_HOST}/${NEXUS_REPO}/student-app:${IMAGE_TAG}"
 
@@ -33,22 +33,22 @@ pipeline {
                 sh 'mvn clean verify'
             }
         }
-stage('SonarQube Analysis') {
-    steps {
-        withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_LOGIN')]) {
-            withSonarQubeEnv('sonarqube') {
-                sh """
-                    mvn sonar:sonar \
-                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                      -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
-                      -Dsonar.login=${SONAR_LOGIN} \
-                      -Dsonar.java.binaries=target/classes
-                """
+
+        stage('SonarQube Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_LOGIN')]) {
+                    withSonarQubeEnv('sonarqube') {
+                        sh """
+                            mvn sonar:sonar \
+                              -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                              -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+                              -Dsonar.login=${SONAR_LOGIN} \
+                              -Dsonar.java.binaries=target/classes
+                        """
+                    }
+                }
             }
         }
-    }
-}
-
 
         stage('Quality Gate') {
             steps {
@@ -73,11 +73,11 @@ stage('SonarQube Analysis') {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh """
+                    sh '''
                         echo "$DOCKER_PASS" | docker login ${NEXUS_HOST} -u "$DOCKER_USER" --password-stdin
                         docker push ${DOCKER_IMAGE}
                         docker logout ${NEXUS_HOST}
-                    """
+                    '''
                 }
             }
         }
