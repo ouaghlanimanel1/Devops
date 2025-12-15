@@ -103,8 +103,8 @@ pipeline {
                     student-app=${DOCKER_IMAGE} -n ${K8S_NAMESPACE}
 
                   # Optional: force delete stuck pods (safety)
-                  kubectl --kubeconfig=${KUBECONFIG} delete pod -l app=student-app -n ${K8S_NAMESPACE} --force --grace-period=0 || true
-
+                  kubectl --kubeconfig=${KUBECONFIG} rollout restart deployment/student-app -n ${K8S_NAMESPACE}
+                  
                   # Wait for rollout
                   kubectl --kubeconfig=${KUBECONFIG} rollout status deployment/student-app \
                     -n ${K8S_NAMESPACE} --timeout=300s
