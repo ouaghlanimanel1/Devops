@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         DOCKER_CREDENTIALS = "pipeline-exemple"
-        IMAGE_TAG = "${env.BUILD_NUMBER}"  // Use Jenkins build number to ensure unique tags
+        IMAGE_TAG = "${env.BUILD_NUMBER}"  // Jenkins build number
 
         NEXUS_HOST = "192.168.33.10:8081"
         NEXUS_REGISTRY = "192.168.33.10:8083"
@@ -71,7 +71,7 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh """
-                      # Login au registry Docker sur le port 8083
+                      # Login au registry Docker privé
                       echo "${DOCKER_PASS}" | docker login ${NEXUS_REGISTRY} -u "${DOCKER_USER}" --password-stdin
                       
                       # Push de l'image
@@ -84,33 +84,58 @@ pipeline {
             }
         }
 
+        stage('Create Kubernetes Docker Secret') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKER_CREDENTIALS}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                      # Create or replace imagePullSecret
+                      kubectl delete secret nexus-secret -n ${K8S_NAMESPACE} --ignore-not-found
+                      kubectl create secret docker-registry nexus-secret \
+                        --docker-server=${NEXUS_REGISTRY} \
+                        --docker-username=${DOCKER_USER} \
+                        --docker-password=${DOCKER_PASS} \
+                        -n ${K8S_NAMESPACE}
+                    """
+                }
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
                   # Ensure namespace exists
-                  kubectl --kubeconfig=${KUBECONFIG} get namespace ${K8S_NAMESPACE} \
-                    || kubectl --kubeconfig=${KUBECONFIG} create namespace ${K8S_NAMESPACE}
+                  kubectl get namespace ${K8S_NAMESPACE} || kubectl create namespace ${K8S_NAMESPACE}
 
-                  # Deploy MySQL
-                  kubectl --kubeconfig=${KUBECONFIG} apply -f kub/mysql-deployment.yaml -n ${K8S_NAMESPACE}
+                  # Apply MySQL deployment (ensure revisionHistoryLimit)
+                  kubectl apply -f kub/mysql-deployment.yaml -n ${K8S_NAMESPACE}
+                  kubectl patch deployment mysql -n ${K8S_NAMESPACE} -p '{"spec":{"revisionHistoryLimit":1}}'
 
+                  # Apply Spring deployment
+                  kubectl apply -f kub/spring-deployment.yaml -n ${K8S_NAMESPACE}
+                  kubectl patch deployment student-app -n ${K8S_NAMESPACE} -p '{"spec":{"revisionHistoryLimit":1}}'
 
-                  # Deploy Spring app
-                  kubectl --kubeconfig=${KUBECONFIG} apply -f kub/spring-deployment.yaml -n ${K8S_NAMESPACE}
+                  # Add imagePullSecret to deployment
+                  kubectl patch deployment student-app -n ${K8S_NAMESPACE} \
+                    -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"nexus-secret"}]}}}}'
 
-                  # Update image with unique tag
-                  kubectl --kubeconfig=${KUBECONFIG} set image deployment/student-app \
+                  # Update deployment image
+                  kubectl set image deployment/student-app \
                     student-app=${DOCKER_IMAGE} -n ${K8S_NAMESPACE}
 
-                  # Optional: force delete stuck pods (safety)
-                  kubectl --kubeconfig=${KUBECONFIG} rollout restart deployment/student-app -n ${K8S_NAMESPACE}
-                  
-                  # Wait for rollout
-                  kubectl --kubeconfig=${KUBECONFIG} rollout status deployment/student-app \
-                    -n ${K8S_NAMESPACE} --timeout=300s
+                  # Restart deployments cleanly
+                  kubectl rollout restart deployment/mysql -n ${K8S_NAMESPACE}
+                  kubectl rollout restart deployment/student-app -n ${K8S_NAMESPACE}
 
-                  # Show pods status
-                  kubectl --kubeconfig=${KUBECONFIG} get pods -n ${K8S_NAMESPACE}
+                  # Wait for rollout to complete
+                  kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=300s
+                  kubectl rollout status deployment/student-app -n ${K8S_NAMESPACE} --timeout=300s
+
+                  # Show pods
+                  kubectl get pods -n ${K8S_NAMESPACE}
                 '''
             }
         }
