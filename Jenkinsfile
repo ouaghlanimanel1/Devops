@@ -91,9 +91,9 @@ pipeline {
                   kubectl --kubeconfig=${KUBECONFIG} get namespace ${K8S_NAMESPACE} \
                     || kubectl --kubeconfig=${KUBECONFIG} create namespace ${K8S_NAMESPACE}
 
-                  # Deploy MySQL and wait until ready
+                  # Deploy MySQL
                   kubectl --kubeconfig=${KUBECONFIG} apply -f kub/mysql-deployment.yaml -n ${K8S_NAMESPACE}
-                  kubectl wait --for=condition=Ready pod -l app=mysql -n ${K8S_NAMESPACE} --timeout=180s
+
 
                   # Deploy Spring app
                   kubectl --kubeconfig=${KUBECONFIG} apply -f kub/spring-deployment.yaml -n ${K8S_NAMESPACE}
