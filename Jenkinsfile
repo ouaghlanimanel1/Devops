@@ -29,9 +29,20 @@ pipeline {
             }
         }
 
-        stage('Build & Unit Tests') {
+        stage('Build') {
             steps {
-                sh 'mvn clean verify'
+                sh 'mvn clean compile'
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh 'mvn test'
+            }
+            post {
+                always {
+                    junit 'target/surefire-reports/*.xml'
+                }
             }
         }
 
